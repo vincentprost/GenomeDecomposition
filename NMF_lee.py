@@ -44,12 +44,13 @@ cpu = 20
 
 K = 200
 chunk_size = 2**18
-#vectors = np.memmap("matrices/" + 'abundance' + name + "_cwn", dtype='float32', mode='r', shape=(n, 2**hash_size), order='F')
+
 vectors = np.memmap(args.input + '/kmer_counts_el1_27_kl', dtype='float32', mode='r', shape=(n, 2**hash_size), order='F')
 clusters_mm = np.memmap(args.output + "/kmer_clusters" + name  + name2 , dtype='int16', mode='w+', shape=(5, 2**hash_size), order='F')
 
 non_zeros = np.memmap(args.output +  '/non_zeros' + name, dtype='bool', mode='r', shape= (2**27))
-#non_zeros = np.load("matrices/non_zeros_el1_27_cwn.npy")
+
+
 
 nz = np.array(non_zeros)
 nzi = np.sum(nz)
@@ -61,7 +62,7 @@ di = np.arange(2**hash_size, dtype = np.int32)[nz]
 ii = np.cumsum(nz).astype(np.int32) - 1
 
 
-chunk_size = int(60e6)
+chunk_size = nzi
 
 vectors = np.array(vectors[:, nz])
 
@@ -74,9 +75,9 @@ for i in range(K):
 	ind = np.random.randint(chunk_size)
 	D[:, i] = vectors[:, ind]
 
+
 alpha = np.random.rand(K, chunk_size)
-alpha = np.ones((K, chunk_size)) / K
-#D[:] = vectors[:, 0:K]
+#alpha = np.ones((K, chunk_size)) / K
 
 
 def lee_kl_D(X, D, alpha):
@@ -86,7 +87,6 @@ def lee_kl_D(X, D, alpha):
 def lee_kl_alpha(X, D, alpha):
 	D_ = (D / np.sum(D, axis = 0)).T
 	return (D_ @ np.divide(X, D  @  alpha) ) * alpha
-
 
 def nmf_lee_and_seung(X, dim = -1):
 	if dim == -1:
@@ -173,10 +173,8 @@ iter_nb = int(nzi/chunk_size) + 1
 r = p.imap(write_part_kl, range(iter_nb))
 
 for i in range(iter_nb):
-
 	inds, c = r.next()
 	clusters[di[inds]] = c[:]
 	clusters.flush()
-
 
 exit()
