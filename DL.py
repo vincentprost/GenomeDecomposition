@@ -16,7 +16,7 @@ import multiprocessing
 import argparse
 
 name = "/export/home/vprost/workspace/LatentStrainAnalysis-master_light/matrices"
-name2 = "_"
+name2 = "_DL"
 
 parser = argparse.ArgumentParser(description='Optional app description')
 
@@ -27,6 +27,11 @@ parser.add_argument('-o', '--output', type=str, default="matrices",
                     help='output folder')
 
 args = parser.parse_args()
+
+
+if not os.path.exists(args.output):
+    os.makedirs(args.output)
+
 
 
 print("matrix "  + args.input)
@@ -45,8 +50,6 @@ random.seed(0)
 vectors = np.memmap(args.input + "/abundance_el1_27_cwn", dtype='float32', mode='r', shape=(n, 2**hash_size), order='F')
 non_zeros = np.fromfile(args.input + "/non_zeros_el1_27", dtype='bool')
 
-
-
 clusters_mm = np.memmap(args.output + "/kmer_clusters" + name2, dtype='int16', mode='w+', shape=(5, 2**hash_size), order='F')
 
 nzi = np.sum(non_zeros)
@@ -64,7 +67,7 @@ print(vectors)
 
 param = { 'mode' : 2, 'K' : K,
           'lambda1' : 0.1, 'lambda2' : 0.1, 'posAlpha' : True, 'numThreads' : 2, 'batchsize' : 10000,
-          'iter' : 20000, 'posD' : True}
+          'iter' : 200, 'posD' : True}
 
 
 lparam = { 'mode' : 2,
@@ -81,7 +84,7 @@ for i in range(K):
 	D[:, i] = vectors[:, ind]
 
 
-def dictionnary_update(D, A, B):
+def dictionary_update(D, A, B):
 	j = 0
 	cols = np.shape(D)[1]
 	diff = np.inf
@@ -128,7 +131,7 @@ def sparse_coding(i, D):
 
 
 def write_part(i):
-	means = np.load("matrices/D" + name2 + ".npy")
+	means = np.load(args.output + "/D" + name2 + ".npy")
 
 	if i == 0:
 		print(np.shape(means))
@@ -165,7 +168,7 @@ B = np.zeros((n, K), dtype = np.float64)
 
 
 
-for k in np.arange(2, 1000):
+for k in np.arange(2, 100):
 
 	print(str(k) + " ieme iteration")
 
@@ -203,15 +206,15 @@ for k in np.arange(2, 1000):
 	A = A + beta * A_
 	B = B + beta * B_
 
-	#D = dictionnary_update(D, A/float(k), B/float(k))
-	D = dictionnary_update(D, A, B)
+
+	D = dictionary_update(D, A, B)
 
 	#print(D, A, B)
 	#print("D", np.sum(np.sum(D, 0) == 0))
 	#print("A", np.sum(A[0:K, 0:K] == 0))
 
 
-np.save("matrices/D" + name2, D)
+np.save(args.output + "/D" + name2, D)
 print(D)
 
 print("write clusters")
