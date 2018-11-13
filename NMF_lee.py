@@ -20,6 +20,9 @@ name = "/export/home/vprost/workspace/LatentStrainAnalysis-master_light/matrices
 name2 = "_NMF_lee"
 
 
+parser = argparse.ArgumentParser(description='Optional app description')
+
+
 parser.add_argument('-i', '--input',  type=str,
                     help='input folder')
 
