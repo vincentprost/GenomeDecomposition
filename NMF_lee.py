@@ -14,7 +14,7 @@ import scipy.sparse as sp
 import spams
 import time
 import multiprocessing
-
+import argparse
 
 name = "/export/home/vprost/workspace/LatentStrainAnalysis-master_light/matrices"
 name2 = "_NMF_lee"
@@ -49,9 +49,8 @@ K = 200
 chunk_size = 2**18
 
 vectors = np.memmap(args.input + '/kmer_counts_el1_27_kl', dtype='float32', mode='r', shape=(n, 2**hash_size), order='F')
-clusters_mm = np.memmap(args.output + "/kmer_clusters" + name  + name2 , dtype='int16', mode='w+', shape=(5, 2**hash_size), order='F')
-
-non_zeros = np.memmap(args.output +  '/non_zeros' + name, dtype='bool', mode='r', shape= (2**27))
+clusters_mm = np.memmap(args.output + "/kmer_clusters"  + name2 , dtype='int16', mode='w+', shape=(5, 2**hash_size), order='F')
+non_zeros = np.memmap(args.input +  '/non_zeros_el1_27', dtype='bool', mode='r', shape= (2**27))
 
 
 
@@ -65,7 +64,7 @@ di = np.arange(2**hash_size, dtype = np.int32)[nz]
 ii = np.cumsum(nz).astype(np.int32) - 1
 
 
-chunk_size = nzi
+chunk_size = int(nzi/4)
 
 vectors = np.array(vectors[:, nz])
 
@@ -79,7 +78,8 @@ for i in range(K):
 	D[:, i] = vectors[:, ind]
 
 
-alpha = np.random.rand(K, chunk_size)
+
+alpha = np.random.rand(K, chunk_size).astype(np.float32)
 #alpha = np.ones((K, chunk_size)) / K
 
 
