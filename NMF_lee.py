@@ -157,7 +157,7 @@ while diff > 1e-4:
 	print(D)
 	diff = np.max(np.abs(D - D_))
 	print(diff)
-	np.save(args.output + "D" + name2, D)
+	np.save(args.output + "/D" + name2, D)
 	D_ = D
 
 
