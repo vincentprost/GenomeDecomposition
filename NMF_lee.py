@@ -123,7 +123,7 @@ def nmf_lee_and_seung(X, dim = -1):
 
 def write_part_kl(i):
 	print(i)
-	D = np.load("matrices/D" + name2 + ".npy")
+	D = np.load(args.output + "/D" + name2 + ".npy")
 
 
 	sup = min(nzi, (i + 1) * chunk_size)
@@ -169,7 +169,7 @@ print(D)
 
 p = multiprocessing.Pool(3)
 print("write clusters")
-chunk_size = 2**16
+chunk_size = 2**18
 iter_nb = int(nzi/chunk_size) + 1
 
 
