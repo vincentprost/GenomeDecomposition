@@ -14,7 +14,7 @@ import multiprocessing
 #import pathos.multiprocessing as multiprocessing
 
 import argparse
-from dictionary_learner import DictionaryLearner, ClusterWriter
+from dictionary_learner import DictionaryLearner, ClusterWriter, write_clusters
 
 name = "/export/home/vprost/workspace/LatentStrainAnalysis-master_light/matrices"
 name2 = "_DL"
@@ -61,5 +61,5 @@ DL = DictionaryLearner()
 D = DL.learn_dictionary(CW.vectors)
 print(D)
 
-
-CW.write_clusters(DL, D, p, args.output)
+write_clusters(DL, CW.vectors, CW.non_zero_columns,  args.output)
+#CW.write_clusters(DL, D, p, args.output)

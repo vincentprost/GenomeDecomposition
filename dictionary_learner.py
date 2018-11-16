@@ -10,17 +10,51 @@ import spams
 import time
 import multiprocessing
 import argparse
-import pickle4reducer
 import multiprocessing as mp
-ctx = mp.get_context()
-ctx.reducer = pickle4reducer.Pickle4Reducer()
 
+
+
+
+def write_clusters(dictionary_learner, D, vectors, non_zero_columns, output_directory = ""):
+    print("write clusters")
+    #self.dictionary_learner = dictionary_learner
+    #self.chunk_size = self.dictionary_learner.chunk_size
+    di = np.arange(2**27, dtype = np.int32)[non_zero_columns]
+
+    chunk_size = 2**18
+    dictionary_learner.set_dictionary(D)
+
+    clusters_mm = np.memmap(output_directory+ "/kmer_clusters", dtype='int16', mode='w+', shape=(5, len(non_zero_columns)), order='F')
+    clusters = clusters_mm[0,:]
+
+    #iter_nb = int(len(self.non_zero_columns)/chunk_size) + 1
+    iter_nb = 4
+    print(iter_nb)
+    #di = np.arange(len(self.non_zero_columns), dtype = np.int32)[self.non_zero_columns]
+
+    arguments = []
+    for i in range(iter_nb + 1):
+        sup = min(int(6e7), (i + 1) * chunk_size)
+        inds = np.arange(i * chunk_size, sup)
+        arguments = arguments + [vectors[:, inds]]
+
+
+    p = mp.Pool(3)
+    r = p.imap(dictionary_learner.find_best_clusters, arguments)
+
+    for i in range(iter_nb):
+        print(i)
+        sup = min(int(6e7), (i + 1) * chunk_size)
+        inds = np.arange(i * chunk_size, sup)
+        c = r.next()
+        clusters[di[inds]] = c[:]
+        clusters.flush()
 
 
 
 class DictionaryLearner:
 
-    def __init__(self, K = 200, cpu = 5, iter_nb = 100, chunk_size = 2000):
+    def __init__(self, K = 200, cpu = 5, iter_nb = 2000, chunk_size = 2000):
         self.K = K
         self.cpu = 5
         #self.vectors = vectors
@@ -113,7 +147,7 @@ class DictionaryLearner:
 
 
 
-    def find_best_clusters(i, vectors):
+    def find_best_clusters(self, vectors):
         #sup = min(np.shape(vectors)[1], (i + 1) * self.chunk_size)
         #inds = np.arange(i * self.chunk_size, sup)
         #v = vectors[:, inds]
@@ -200,7 +234,7 @@ class ClusterWriter:
         clusters = self.dictionary_learner.find_best_clusters(i, v)
         return inds, clusters
 
-
+    """
     def write_clusters(self, dictionary_learner, D, pool, output_directory = ""):
         print("write clusters")
         self.dictionary_learner = dictionary_learner
@@ -219,17 +253,43 @@ class ClusterWriter:
         di = np.arange(len(self.non_zero_columns), dtype = np.int32)[self.non_zero_columns]
 
         #r = pool.map(self.write_part, range(0, iter_nb))
-        processes = []
-        for i in range(iter_nb):
-            p = Process(target=self.write_part, args= i)
-            processes.append[p]
 
-        [x.start() for x in processes]
 
-        """
         for i in range(iter_nb):
             print(i)
             inds, c = r.next()
             clusters[di[inds]] = c[:]
             clusters.flush()
-        """
+    """
+
+    def write_clusters(self, dictionary_learner, D, output_directory = ""):
+        print("write clusters")
+        ncols = len(self.non_zero_columns)
+        nzi = np.shape(self.vectors)[1]
+        di = np.arange(ncols, dtype = np.int32)[self.non_zero_columns]
+
+        chunk_size = 2**18
+        dictionary_learner.set_dictionary(D)
+
+        clusters_mm = np.memmap(output_directory+ "/kmer_clusters", dtype='int16', mode='w+', shape=(5, ncols), order='F')
+        clusters = clusters_mm[0,:]
+
+        iter_nb = int(nzi/chunk_size) + 1
+        print(iter_nb)
+        arguments = []
+        for i in range(iter_nb + 1):
+            sup = min(nzi, (i + 1) * chunk_size)
+            #inds = np.arange(i * chunk_size, sup)
+            arguments = arguments + [self.vectors[:, np.arange(i * chunk_size, sup)]]
+
+
+        p = mp.Pool(4)
+        r = p.imap(dictionary_learner.find_best_clusters, arguments)
+
+        for i in range(iter_nb):
+            print(i)
+            sup = min(nzi, (i + 1) * chunk_size)
+            inds = np.arange(i * chunk_size, sup)
+            c = r.next()
+            clusters[di[inds]] = c[:]
+            clusters.flush()
