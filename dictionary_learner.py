@@ -14,71 +14,41 @@ import multiprocessing as mp
 
 
 
+def eval_dictionary(D, G):
+    D = D /  np.sqrt(np.sum(D * D, 0))
+    D = np.nan_to_num(D)
+    dd = D.T @ G
+    err = np.max(dd, 0)
+    err3 = np.sum(2 - 2* err)
+    return err3
 
-def write_clusters(dictionary_learner, D, vectors, non_zero_columns, output_directory = ""):
-    print("write clusters")
-    #self.dictionary_learner = dictionary_learner
-    #self.chunk_size = self.dictionary_learner.chunk_size
-    di = np.arange(2**27, dtype = np.int32)[non_zero_columns]
-
-    chunk_size = 2**18
-    dictionary_learner.set_dictionary(D)
-
-    clusters_mm = np.memmap(output_directory+ "/kmer_clusters", dtype='int16', mode='w+', shape=(5, len(non_zero_columns)), order='F')
-    clusters = clusters_mm[0,:]
-
-    #iter_nb = int(len(self.non_zero_columns)/chunk_size) + 1
-    iter_nb = 4
-    print(iter_nb)
-    #di = np.arange(len(self.non_zero_columns), dtype = np.int32)[self.non_zero_columns]
-
-    arguments = []
-    for i in range(iter_nb + 1):
-        sup = min(int(6e7), (i + 1) * chunk_size)
-        inds = np.arange(i * chunk_size, sup)
-        arguments = arguments + [vectors[:, inds]]
-
-
-    p = mp.Pool(3)
-    r = p.imap(dictionary_learner.find_best_clusters, arguments)
-
-    for i in range(iter_nb):
-        print(i)
-        sup = min(int(6e7), (i + 1) * chunk_size)
-        inds = np.arange(i * chunk_size, sup)
-        c = r.next()
-        clusters[di[inds]] = c[:]
-        clusters.flush()
 
 
 
 class DictionaryLearner:
 
-    def __init__(self, K = 200, cpu = 5, iter_nb = 2000, chunk_size = 2000):
+    def __init__(self, K = 200, cpu = 5, iter_nb = 500, chunk_size = 2000,
+    sparse_coding_type = "omp", opt_function = "F", lambda1 = 0.1, lambda2 = 0.1, eps = 0.1):
+        np.random.seed(0)
         self.K = K
         self.cpu = 5
-        #self.vectors = vectors
-        #self.n = np.shape(vectors)[0]
-
-        #self.D = np.zeros((self.n, K))
-        #self.D = np.asfortranarray(np.zeros((self.n, K), dtype = np.float32))
-
-        #self.init_dictionary()
-
-
         self.chunk_size = chunk_size
         self.iter_nb = iter_nb
-        self.lass_params = { 'mode' : 2,
-                  'lambda1' : 0.1, 'lambda2' : 0.1, 'pos' : True, 'numThreads' : 2
+        self.lasso_params = { 'mode' : 0,
+                  'lambda1' : lambda1, 'lambda2' : lambda2, 'pos' : True, 'numThreads' : 2
         }
 
-    def __str__(self):
+        self.omp_eps = 0.1
+        self.sparse_coding_type = sparse_coding_type
+        self.opt_function = opt_function
+        print(self.sparse_coding_type)
 
+
+    def __str__(self):
         return "DictionaryLearner"
 
     def set_dictionary(self, D):
         self.D = D
-
 
     def sparse_coding_lasso(self, i, vectors):
         A = np.zeros((self.K, self.K))
@@ -86,18 +56,80 @@ class DictionaryLearner:
         self.chunk_size = 2000
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
-        a = spams.lasso(v, D = self.D,**self.lass_params).toarray()
-
-
+        a = spams.lasso(v, D = self.D,**self.lasso_params).toarray()
         for k in np.arange(len(inds)):
         	A += np.outer(a[:,k],a[:,k])
         	B += np.outer(v[:,k],a[:,k])
+        return A, B
 
+    def sparse_coding_omp(self, i, vectors):
+        A = np.zeros((self.K, self.K))
+        B = np.zeros((self.n, self.K))
+        self.chunk_size = 2000
+        inds = np.arange(i, i + self.chunk_size)
+        v = vectors[:, inds]
+        a = spams.omp(v, D = self.D, eps = self.omp_eps, return_reg_path = False).toarray()
+        #a = spams.omp(v, D = self.D, L = 3, return_reg_path = False).toarray()
+        for k in np.arange(len(inds)):
+            A += np.outer(a[:,k],a[:,k])
+            B += np.outer(v[:,k],a[:,k])
         return A, B
 
 
+    def sparse_coding_very_sparse(self, i, vectors):
+        A = np.zeros((self.K, self.K))
+        B = np.zeros((self.n, self.K))
+        self.chunk_size = 2000
+
+        inds = np.arange(i, i + self.chunk_size)
+        v = vectors[:, inds]
+        #clusts = np.zeros(len(inds), dtype = np.int32)
+
+        for k in np.arange(len(inds)):
+            d = v[:,k].dot(self.D)
+            clust = np.nanargmax(d)
+            alpha = np.dot(self.D[:, clust], v[:,k])/np.dot(self.D[:, clust], self.D[:, clust])
+            A[clust, clust] += alpha ** 2
+            B[:, clust] += alpha * v[:,k]
+        return A, B
+
+    def sparse_coding_very_sparse_kl(self, i, vectors):
+        A = np.zeros((self.K, self.K))
+        B = np.zeros((self.n, self.K))
+        self.chunk_size = 2000
+
+        inds = np.arange(i, i + self.chunk_size)
+        v = vectors[:, inds]
+        lD = np.log(self.D)
+        for k in np.arange(len(inds)):
+            kld = v[:,k].dot(lD)
+            clust = np.nanargmax(kld)
+            alpha = np.sum(self.D[:, clust]) / np.sum(v[:,k])
+            A[clust, clust] += alpha
+            B[:, clust] += alpha * v[:,k]
+        return A, B
+
+
+    def sparse_coding(self, i, vectors):
+        if self.sparse_coding_type == "lasso":
+            return self.sparse_coding_lasso(i, vectors)
+        elif self.sparse_coding_type == "omp":
+            return self.sparse_coding_omp(i, vectors)
+        elif self.sparse_coding_type == "very_sparse":
+            if self.opt_function == "F":
+                return self.sparse_coding_very_sparse(i, vectors)
+            elif self.opt_function == "KL":
+                return self.sparse_coding_very_sparse_kl(i, vectors)
+
 
     def update_dictionary(self, A, B):
+        if self.opt_function == "F":
+            return self.update_dictionary_F(A, B)
+        elif self.opt_function == "KL":
+            return self.update_dictionary_KL(A, B)
+
+
+    def update_dictionary_F(self, A, B):
         j = 0
         diff = np.inf
         err = 0
@@ -116,6 +148,14 @@ class DictionaryLearner:
             if count > 200:
             	print(" more than 200 iterations")
             	break
+        #return D /  np.sqrt(np.sum(D * D, 0))
+        return D
+
+
+    def update_dictionary_KL(self, A, B):
+        A[A == 0] = 0.1
+        D = B/np.diagonal(A)
+        D[D == np.inf] = 1
         return D
 
 
@@ -127,15 +167,34 @@ class DictionaryLearner:
 
         for k in np.arange(2, self.iter_nb):
             offset = np.random.randint(np.shape(vectors)[1] - self.chunk_size - 1)
-            beta = 0.99
-            A_, B_ = self.sparse_coding_lasso(offset, vectors)
-            A = A + beta * A_
-            B = B + beta * B_
+            beta = 0.7
+            A_, B_ = self.sparse_coding(offset, vectors)
+            A = beta * A + A_
+            B = beta * B + B_
             D = self.update_dictionary(A, B)
             self.D = D
         return self.D
 
 
+    def learn_dictionary_eval(self, vectors, G):
+
+        self.n = np.shape(vectors)[0]
+        self.init_dictionary(vectors)
+        A = np.zeros((self.K, self.K), dtype = np.float64)
+        B = np.zeros((self.n, self.K), dtype = np.float64)
+        err = np.zeros(self.iter_nb)
+
+        for k in np.arange(self.iter_nb):
+            print("iter " + str(k))
+            offset = np.random.randint(np.shape(vectors)[1] - self.chunk_size - 1)
+            beta = 0.7
+            A_, B_ = self.sparse_coding(offset, vectors)
+            A = beta * A + A_
+            B = beta * B + B_
+            D = self.update_dictionary(A, B)
+            self.D = D
+            err[k] = eval_dictionary(D, G)
+        return self.D, err
 
 
     def init_dictionary(self, vectors):
@@ -146,24 +205,31 @@ class DictionaryLearner:
         	self.D[:, i] = vectors[:, ind]
 
 
-
-    def find_best_clusters(self, vectors):
-        #sup = min(np.shape(vectors)[1], (i + 1) * self.chunk_size)
-        #inds = np.arange(i * self.chunk_size, sup)
-        #v = vectors[:, inds]
-
-        #D = distance.cdist(v.T, means.T, 'euclidean')
+    def find_best_clusters_F(self, vectors):
         dd = distance.cdist(vectors.T, self.D.T, 'cosine')
-
         clusts = np.nanargmin(dd, axis = 1)
-
         vals = dd[np.arange(len(clusts)), clusts]
         ol = vals > np.inf
-
         clusters = np.zeros((np.shape(vectors)[1],), dtype = np.int16)
         clusters[~ol] = clusts[~ol] + 1
-
         return clusters
+
+
+    def find_best_clusters_kl(self, vectors):
+        lD = np.log(self.D)
+        clusters = np.zeros((np.shape(vectors)[1],), dtype = np.int16)
+        for k in np.arange(np.shape(vectors)[1]):
+            kld = vectors[:,k].dot(lD)
+            clust = np.nanargmax(kld)
+            clusters[k] = clust + 1
+        return clusters
+
+
+    def find_best_clusters(self, vectors):
+        if self.opt_function == "F":
+            return self.find_best_clusters_F(vectors)
+        if self.opt_function == "KL":
+            return self.find_best_clusters_F(vectors)
 
 
 
@@ -182,11 +248,11 @@ class ClusterWriter:
         self.param = param
         #self.p = mp.Pool(1)
 
-    def read_data(self, input_data, nrows = 0, ncols = 0, data_type = 'float32', non_zero_columns = None, order='F'):
+    def read_data(self, input_data,  nrows = 0, ncols = 0, data_type = 'float32', non_zero_columns = None, order='F'):
 
         error_message = "error, could not read data"
         matrix_loaded = False
-        if non_zero_columns != None:
+        if non_zero_columns is not None:
             try:
                 non_zero_columns = np.load(non_zero_columns)
             except:
@@ -223,6 +289,9 @@ class ClusterWriter:
         else:
             self.non_zero_columns = non_zero_columns
 
+
+
+
     def write_part(self, i):
         print("start ok ")
 
@@ -234,38 +303,15 @@ class ClusterWriter:
         clusters = self.dictionary_learner.find_best_clusters(i, v)
         return inds, clusters
 
-    """
-    def write_clusters(self, dictionary_learner, D, pool, output_directory = ""):
+
+    def write_clusters(self, dictionary_learner, D, output_directory = "", non_zero_columns = None):
         print("write clusters")
-        self.dictionary_learner = dictionary_learner
-        self.chunk_size = self.dictionary_learner.chunk_size
-        self.chunk_size = 2**18
+        if non_zero_columns is not None:
+            self.non_zero_columns = non_zero_columns
 
-        self.dictionary_learner.set_dictionary(D)
-
-
-        clusters_mm = np.memmap(output_directory+ "/kmer_clusters", dtype='int16', mode='w+', shape=(5, len(self.non_zero_columns)), order='F')
-        clusters = clusters_mm[0,:]
-
-
-        iter_nb = int(len(self.non_zero_columns)/self.chunk_size) + 1
-        print(iter_nb)
-        di = np.arange(len(self.non_zero_columns), dtype = np.int32)[self.non_zero_columns]
-
-        #r = pool.map(self.write_part, range(0, iter_nb))
-
-
-        for i in range(iter_nb):
-            print(i)
-            inds, c = r.next()
-            clusters[di[inds]] = c[:]
-            clusters.flush()
-    """
-
-    def write_clusters(self, dictionary_learner, D, output_directory = ""):
-        print("write clusters")
         ncols = len(self.non_zero_columns)
         nzi = np.shape(self.vectors)[1]
+
         di = np.arange(ncols, dtype = np.int32)[self.non_zero_columns]
 
         chunk_size = 2**18
@@ -279,7 +325,6 @@ class ClusterWriter:
         arguments = []
         for i in range(iter_nb + 1):
             sup = min(nzi, (i + 1) * chunk_size)
-            #inds = np.arange(i * chunk_size, sup)
             arguments = arguments + [self.vectors[:, np.arange(i * chunk_size, sup)]]
 
 
