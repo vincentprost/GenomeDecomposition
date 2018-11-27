@@ -290,6 +290,11 @@ class ClusterWriter:
             self.non_zero_columns = non_zero_columns
 
 
+    def get_vectors(self, vectors):
+        return self.vectors = vectors
+
+    def set_vectors(self, vectors):
+        self.vectors = vectors
 
 
     def write_part(self, i):
