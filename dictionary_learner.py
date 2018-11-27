@@ -291,7 +291,7 @@ class ClusterWriter:
 
 
     def get_vectors(self, vectors):
-        return self.vectors = vectors
+        return self.vectors
 
     def set_vectors(self, vectors):
         self.vectors = vectors
