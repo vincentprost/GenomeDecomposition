@@ -53,7 +53,6 @@ class DictionaryLearner:
     def sparse_coding_lasso(self, i, vectors):
         A = np.zeros((self.K, self.K))
         B = np.zeros((self.n, self.K))
-        self.chunk_size = 2000
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
         a = spams.lasso(v, D = self.D,**self.lasso_params).toarray()
@@ -65,7 +64,6 @@ class DictionaryLearner:
     def sparse_coding_omp(self, i, vectors):
         A = np.zeros((self.K, self.K))
         B = np.zeros((self.n, self.K))
-        self.chunk_size = 2000
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
         a = spams.omp(v, D = self.D, eps = self.omp_eps, return_reg_path = False).toarray()
@@ -79,7 +77,6 @@ class DictionaryLearner:
     def sparse_coding_very_sparse(self, i, vectors):
         A = np.zeros((self.K, self.K))
         B = np.zeros((self.n, self.K))
-        self.chunk_size = 2000
 
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
@@ -96,7 +93,6 @@ class DictionaryLearner:
     def sparse_coding_very_sparse_kl(self, i, vectors):
         A = np.zeros((self.K, self.K))
         B = np.zeros((self.n, self.K))
-        self.chunk_size = 2000
 
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
@@ -174,6 +170,7 @@ class DictionaryLearner:
             D = self.update_dictionary(A, B)
             self.D = D
         return self.D
+
 
 
     def learn_dictionary_eval(self, vectors, G):
@@ -320,6 +317,9 @@ class ClusterWriter:
         di = np.arange(ncols, dtype = np.int32)[self.non_zero_columns]
 
         chunk_size = 2**18
+
+        # TODO set independance between D and write clusters
+
         dictionary_learner.set_dictionary(D)
 
         clusters_mm = np.memmap(output_directory+ "/kmer_clusters", dtype='int16', mode='w+', shape=(5, ncols), order='F')
