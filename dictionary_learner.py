@@ -41,6 +41,7 @@ class DictionaryLearner:
         self.omp_eps = 0.1
         self.sparse_coding_type = sparse_coding_type
         self.opt_function = opt_function
+        self.D = None
         print(self.sparse_coding_type)
 
 
@@ -66,7 +67,7 @@ class DictionaryLearner:
         B = np.zeros((self.n, self.K))
         inds = np.arange(i, i + self.chunk_size)
         v = vectors[:, inds]
-        a = spams.omp(v, D = self.D, eps = self.omp_eps, return_reg_path = False).toarray()
+        a = spams.omp(v, D = self.D, eps = self.omp_eps, return_reg_path = False, numThreads = self.cpu).toarray()
         #a = spams.omp(v, D = self.D, L = 3, return_reg_path = False).toarray()
         for k in np.arange(len(inds)):
             A += np.outer(a[:,k],a[:,k])
@@ -306,7 +307,7 @@ class ClusterWriter:
         return inds, clusters
 
 
-    def write_clusters(self, dictionary_learner, D, output_directory = "", non_zero_columns = None):
+    def write_clusters(self, dictionary_learner, D, output_directory = "", non_zero_columns = None, clusters_nb = 5):
         print("write clusters")
         if non_zero_columns is not None:
             self.non_zero_columns = non_zero_columns
